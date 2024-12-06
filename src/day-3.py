@@ -1,87 +1,139 @@
 import numpy as np
 import pandas as pd
 import argparse
+import re
+import sys
 
 
-def day_two_p1(in_file):
+def day_three_p1(in_file):
     # Load input Data
-    df = pd.read_csv(in_file, sep=r'\s+', header=None)
+    with open(in_file, 'r') as f:
+        lines = f.readlines()
 
-    def check_levels(row):
-        row_values = row.dropna().values
+    # Remove newline characters and create a DataFrame
+    df = pd.DataFrame([line.strip() for line in lines], columns=['Lines'])
 
-        # Ensure at least two values exist
-        if len(row_values) < 2:
-            return False
+    # Function to find mul pattern
+    def find_mul_patterns(line):
+        # Regex for the pattern: "mul(1-3 digit#,1-3digit#)"
+        pattern = r"mul\(\d{1,3},\d{1,3}\)"
+        return re.findall(pattern, line)
 
-        # Calculate differences
-        diffs = np.diff(row_values)
+    # Define a function to compute the sum of products from the matches
+    def compute_mul_sum(mul_list):
+        total = 0
+        for mul in mul_list:
+            # Extract numbers from the mul pattern
+            numbers = re.findall(r'\d+', mul)
+            if len(numbers) == 2:
+                total += int(numbers[0]) * int(numbers[1])
+        return total
 
-        # Check if all increasing or all decreasing
-        all_increasing = np.all(diffs > 0)
-        all_decreasing = np.all(diffs < 0)
+    # Find and Calc muls
+    df['Muls'] = df['Lines'].apply(find_mul_patterns)
+    df['Sum'] = df['Muls'].apply(compute_mul_sum)
 
-        # Check if differences are between 1 and 3
-        valid_diffs = np.all((np.abs(diffs) >= 1) & (np.abs(diffs) <= 3))
-
-        return (all_increasing or all_decreasing) and valid_diffs
-
-    # Apply the function to each row
-    df['valid'] = df.apply(check_levels, axis=1)
-
-    # Count the number of valid reports
-    safe_count = df['valid'].sum()
-
-    print(f"Number of safe reports: {safe_count}")
+    # Determin sum of muls
+    total = df['Sum'].sum()
+    print(f"Total is {total}")
 
 
-def day_two_p2(in_file):
-    df = pd.read_csv(in_file, sep=r'\s+', header=None)
+def day_three_p2(in_file):
+    # Load input data
+    with open(in_file, 'r') as f:
+        lines = f.readlines()
 
-    def check_levels(row):
-        row_values = row.dropna().values
+    # Create DataFrame with cleaned lines
+    df = pd.DataFrame([line.strip() for line in lines], columns=['Lines'])
 
-        # Ensure at least two values exist
-        if len(row_values) < 2:
-            return False
+    def clean_line(line):
+        # Regex to match "do", "don't", and mul(...) patterns
+        pattern = r"(don't|do|mul\(\d{1,3},\d{1,3}\))"
 
-        # Calculate differences
-        diffs = np.diff(row_values)
+        # Find all matches
+        matches = re.findall(pattern, line)
 
-        # Check if all increasing or all decreasing
-        all_increasing = np.all(diffs > 0)
-        all_decreasing = np.all(diffs < 0)
+        # Process the matches into tuples
+        output = []
+        context = None  # Tracks the last "do" or "don't"
 
-        # Check if differences are between 1 and 3
-        valid_diffs = np.all((np.abs(diffs) >= 1) & (np.abs(diffs) <= 3))
+        for match in matches:
+            if match in {"do", "don't"}:
+                # Update the current context
+                context = match
+            elif match.startswith("mul"):
+                # Pair the current context with the mul(...)
+                output.append((context, match))
+                # Reset context for subsequent mul entries
+                context = None
+            else:
+                # Ignore unrelated matches
+                continue
 
-        return (all_increasing or all_decreasing) and valid_diffs
+        return output
 
-    def check_with_dampener(row):
-        row_values = row.dropna().values
 
-        # If the row is already valid, it's safe
-        if check_levels(row):
-            return True
+    def compute_mul_sum(paired_list):
+        total = 0
+        operation = True  # Tracks whether we are allowed to add `mul` values
+        for prefix, mul in paired_list:
+            if prefix == "don't":
+                operation = False  # Disable processing until a "do" is encountered
+            elif prefix == "do":
+                operation = True  # Enable processing
 
-        # Check removing each level to see if it makes the row valid
-        for i in range(len(row_values)):
-            # Remove the level at index i
-            modified_row = np.delete(row_values, i)
+            # If operation is allowed, process the `mul`
+            if operation:
+                # Extract numbers from the mul pattern
+                numbers = re.findall(r'\d+', mul)
+                if len(numbers) == 2:
+                    total += int(numbers[0]) * int(numbers[1])
 
-            # Check the modified row
-            if check_levels(pd.Series(modified_row)):
-                return True
+        return total
 
-        return False
+    # Apply cleaning to each line
+    df['Paired_Lines'] = df['Lines'].apply(clean_line)
 
-    # Step 1: Apply the dampener logic
-    df['safe'] = df.apply(check_with_dampener, axis=1)
+    # Apply the sum computation to the paired lines
+    df['Sum'] = df['Paired_Lines'].apply(compute_mul_sum)
 
-    # Step 2: Count the number of safe reports
-    safe_count = df['safe'].sum()
+    # Calculate and print total sum of all mul products
+    total = df['Sum'].sum()
+    print(f"Total Sum of mul products: {total}")
 
-    print(f"Number of safe reports: {safe_count}")
+
+def day_three_p2_but_im_not_happy(in_file):
+    # Load input data
+    with open(in_file, 'r') as f:
+        lines = f.read().replace('\n', '')
+
+    # Regex to match "do", "don't", and mul(...) patterns
+    pattern = r"(don't\(\)|do\(\)|mul\(\d{1,3},\d{1,3}\))"
+
+    # Find all matches
+    matches = re.findall(pattern, lines)
+    proc_line = []
+    opp_state = True
+    for match in matches:
+        if match == "don't()":
+            opp_state = False
+            continue
+        elif match == "do()":
+            opp_state = True
+            continue
+        if opp_state:
+            proc_line.append(match)
+
+    def compute_mul_sum(mul_list):
+        total = 0
+        for mul in mul_list:
+            # Extract numbers from the mul pattern
+            numbers = re.findall(r'\d+', mul)
+            if len(numbers) == 2:
+                total += int(numbers[0]) * int(numbers[1])
+        return total
+    total = compute_mul_sum(proc_line)
+    print(f"Total Sum of mul with do and don't: {total}")
 
 
 def main():
@@ -89,8 +141,10 @@ def main():
     parser.add_argument('input_path', type=str,
                         help="Path to the file containing input data")
     args = parser.parse_args()
-    day_two_p1(args.input_path)
-    day_two_p2(args.input_path)
+    day_three_p1(args.input_path)
+    # day_three_p2(args.input_path) #Why
+    day_three_p2_but_im_not_happy(args.input_path)
+
 
 
 if __name__ == "__main__":
